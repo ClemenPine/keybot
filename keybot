@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+import re
+import discord
+from importlib import import_module
+
+from util.session import Session
+from util.consts import DM_COMMANDS, SERVER_COMMANDS
+
+intents = discord.Intents.default()
+intents.message_content = True
+bot = discord.Client(intents=intents)
+
+@bot.event
+async def on_message(message: discord.Message):
+
+    if message.author.bot:
+        return
+
+    if isinstance(message.channel, discord.DMChannel):
+        commands = DM_COMMANDS
+        prefix = ''
+    else:
+        commands = SERVER_COMMANDS
+        prefix = '!'
+
+    if not message.content.startswith(prefix):
+        return
+
+    # init session
+    session = Session(message.author.id)
+    session.name = f'{message.author.name}#{message.author.discriminator}'
+    session.update()
+
+    # split message into tokens but preserve code blocks
+    pattern = re.compile(r"(```\n[\s\S]*?\n```)|(\S+)", re.MULTILINE)
+    tokens = pattern.findall(message.content[len(prefix):].strip())
+    tokens = [x[0] or x[1] for x in tokens]
+
+    if not tokens[0] in commands:
+        reply = f'Error: unrecognized command `{tokens[0]}`'
+    else:
+        mod = import_module(f'cmds.{tokens[0]}')
+        reply = mod.exec(message.author.id, *tokens[1:])
+
+    await message.channel.send(reply, reference=message)
+
+
+def main():
+    with open('token.txt', 'r') as f:
+        token = f.read()
+
+    bot.run(token)
+
+
+if __name__ == '__main__':
+    main()
